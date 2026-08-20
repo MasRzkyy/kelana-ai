@@ -1,0 +1,17 @@
+from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy.sql import func
+from database import Base
+
+class Trip(Base):
+    __tablename__ = "trips"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    destination  = Column(String, nullable=False)
+    days         = Column(Integer, nullable=False)
+    budget       = Column(Float, nullable=False)
+    category     = Column(String, nullable=False)
+    daily_budget = Column(Float, nullable=False)
+    travel_month = Column(String, nullable=True, default="January")
+    travel_style = Column(String, nullable=True, default="")
+    season       = Column(String, nullable=True)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
