@@ -1,13 +1,14 @@
 from fastapi import FastAPI, HTTPException
 from database import SessionLocal, init_db
 from models.trip import Trip
-from schemas.trip import TripRequest, TripUpdate
+from schemas.trip import TripRequest, TripUpdate, TripResponse
 from services.trip_service import (
     calculate_daily_budget,
     get_trip_category,
     get_travel_season,
     get_recommended_places,
 )
+from services.bedrock_service import generate_trip_recommendation
 
 init_db()
 
@@ -146,3 +147,28 @@ def list_recommendations():
 @app.get("/api/v1/transportations")
 def list_transportations():
     return ["Bus", "Train", "Flight"]
+
+
+@app.post("/api/v1/trips/{trip_id}/generate", response_model=TripResponse)
+def generate_ai_recommendation(trip_id: int):
+    db = SessionLocal()
+    try:
+        trip = db.query(Trip).filter(Trip.id == trip_id).first()
+        if trip is None:
+            raise HTTPException(status_code=404, detail=f"Trip with id {trip_id} not found")
+
+        ai_result = generate_trip_recommendation(
+            destination=trip.destination,
+            days=trip.days,
+            budget=trip.budget,
+            category=trip.category,
+            travel_style=trip.travel_style or ""
+        )
+
+        trip.ai_recommendation = ai_result
+        db.commit()
+        db.refresh(trip)
+
+        return trip
+    finally:
+        db.close()

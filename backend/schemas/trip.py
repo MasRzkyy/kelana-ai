@@ -28,6 +28,7 @@ class TripResponse(BaseModel):
     season: Optional[str] = None
     recommended_places: Optional[List[str]] = None
     recommended_transport: Optional[str] = None
+    ai_recommendation: Optional[str] = None
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
