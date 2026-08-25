@@ -31,4 +31,12 @@ Base = declarative_base()
 def init_db() -> None:
     """Create all SQLAlchemy tables for the configured database."""
     import models.trip
+    from sqlalchemy import text
     Base.metadata.create_all(bind=engine)
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE trips ADD COLUMN IF NOT EXISTS ai_recommendation TEXT;"))
+            conn.commit()
+    except Exception as e:
+        print(f"[Database Warning] Auto-migration check: {e}")
+
