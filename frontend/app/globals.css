@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@import "./theme.css";
+
+:root {
+  --color-slate-dark: #141413;
+  --color-ivory-medium: #f0eee6;
+  --color-ivory-light: #faf9f5;
+  --color-cloud-medium: #b0aea5;
+  --color-cloud-dark: #87867f;
+  --color-stone: #cccbc8;
+  --color-slate-medium: #3d3d3a;
+  --color-oat-warm: #e3dacc;
+  --color-manilla: #f5e3c7;
+  --color-clay: #d97757;
+  --color-clay-deep: #c6613f;
+}
+
+body, input, select, button, textarea, option {
+  background-color: #fefefd;
+  color: #141413;
+  font-family: var(--font-outfit), var(--font-plus-jakarta), sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

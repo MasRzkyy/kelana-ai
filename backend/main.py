@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from database import SessionLocal, init_db
 from models.trip import Trip
 from schemas.trip import TripRequest, TripUpdate, TripResponse
@@ -17,6 +18,15 @@ app = FastAPI(
     description="AI-powered travel recommendation service",
     version="1.0.0",
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 
 def get_recommended_transport(travel_style: str) -> str:
