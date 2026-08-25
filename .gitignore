@@ -7,3 +7,11 @@ backend/schemas/__pycache__
 *.db
 *.sqlite3
 .DS_Store
+
+# agent & design docs
+frontend/AGENTS.md
+frontend/CLAUDE.md
+frontend/DESIGN.md
+AGENTS.md
+CLAUDE.md
+DESIGN.md
