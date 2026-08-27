@@ -1,14 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { TripRecommendation } from "@/types/trip";
+import { createTrip, generateAIRecommendation } from "@/services/trip-service";
 
 export function useTripGenerator() {
+  const router = useRouter();
   const [pageLoading, setPageLoading] = useState(true);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [destination, setDestination] = useState("Japan");
-  const [budget, setBudget] = useState(2000);
-  const [days, setDays] = useState(5);
+  const [budget, setBudget] = useState<number | "">(2000);
+  const [days, setDays] = useState<number | "">(5);
   const [travelStyle, setTravelStyle] = useState("Family");
   const [travelMonth, setTravelMonth] = useState("April");
 
@@ -35,35 +38,23 @@ export function useTripGenerator() {
     setTrip(null);
 
     try {
-      const createRes = await fetch("http://localhost:8000/api/v1/trips", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          destination,
-          budget: Number(budget),
-          days: Number(days),
-          travel_style: travelStyle,
-          travel_month: travelMonth,
-        }),
+      const numBudget = Number(budget) || 2000;
+      const numDays = Number(days) || 5;
+
+      const createdTrip = await createTrip({
+        destination,
+        budget: numBudget,
+        days: numDays,
+        travel_style: travelStyle,
+        travel_month: travelMonth,
       });
 
-      if (!createRes.ok) {
-        throw new Error(`Failed to create trip (${createRes.status})`);
-      }
-
-      const createdTrip = await createRes.json();
-
       try {
-        const genRes = await fetch(
-          `http://localhost:8000/api/v1/trips/${createdTrip.id}/generate`,
-          { method: "POST" }
-        );
-        if (genRes.ok) {
-          const aiTrip = await genRes.json();
-          setTrip(aiTrip);
-          setLoading(false);
-          return;
-        }
+        const aiTrip = await generateAIRecommendation(createdTrip.id!);
+        setTrip(aiTrip);
+        setLoading(false);
+        router.push("/trips");
+        return;
       } catch {
         // Fallback if AI generator backend fails
       }
@@ -88,17 +79,17 @@ export function useTripGenerator() {
 
 ### 💡 Travel Tips:
 - Best transportation: Local train / metro pass.
-- Recommended budget: $${Math.round(budget / days)} per day for meals & transit.
+- Recommended budget: $${Math.round(numBudget / numDays)} per day for meals & transit.
 
 ### 🍜 Local Food Recommendations:
 - Must-try dishes: Authentic ramen, fresh sushi, local street food snacks.
 - Dining budget tip: Eat at local food halls and izakaya for great value.
 
 ### 💰 Estimated Budget Breakdown:
-- Accommodation: $${Math.round(budget * 0.4)} (40%)
-- Food & Dining: $${Math.round(budget * 0.3)} (30%)
-- Activities & Transport: $${Math.round(budget * 0.2)} (20%)
-- Emergency Fund: $${Math.round(budget * 0.1)} (10%)
+- Accommodation: $${Math.round(numBudget * 0.4)} (40%)
+- Food & Dining: $${Math.round(numBudget * 0.3)} (30%)
+- Activities & Transport: $${Math.round(numBudget * 0.2)} (20%)
+- Emergency Fund: $${Math.round(numBudget * 0.1)} (10%)
 `,
       });
     } catch (err: unknown) {

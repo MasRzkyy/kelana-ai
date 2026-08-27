@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 interface NavbarProps {
   onStartPlanning?: () => void;
@@ -29,7 +30,7 @@ export default function Navbar({ onStartPlanning }: NavbarProps) {
   };
 
   return (
-    <div className="fixed top-4 inset-x-0 z-50 px-4 sm:px-8 max-w-[1240px] mx-auto w-full pointer-events-none font-[family-name:var(--font-outfit)]">
+    <div className="fixed top-4 inset-x-0 z-50 px-6 sm:px-10 max-w-[1240px] mx-auto w-full pointer-events-none font-[family-name:var(--font-outfit)]">
       {/* 1. TOP FLOATING PILL HEADER */}
       <header className="bg-transparent backdrop-blur-sm border border-[#cccbc8] rounded-full shadow-sm pointer-events-auto transition-all">
         <div className="px-5 sm:px-7 py-2.5 flex items-center justify-between">
@@ -47,27 +48,21 @@ export default function Navbar({ onStartPlanning }: NavbarProps) {
 
           {/* DESKTOP NAV LINKS */}
           <nav className="hidden md:flex items-center gap-8 lg:gap-12 text-sm font-medium text-[#87867f]">
-            <a
-              href="#planner"
-              onClick={handleScrollToPlanner}
-              className="text-[#141413] hover:text-[#d97757] transition-colors py-1 px-2"
+            <Link
+              href="/"
+              className="text-[#141413] hover:text-[#d97757] font-medium transition-colors duration-300 py-1 px-2"
             >
-              Itinerary Planner
-            </a>
-            <a
-              href="#solutions"
-              onClick={handleScrollToPlanner}
-              className="hover:text-[#141413] transition-colors py-1 px-2"
+              Planner
+            </Link>
+            <Link
+              href="/trips"
+              className="group flex items-center gap-1 text-[#141413] hover:text-[#d97757] font-semibold transition-colors duration-300 py-1 px-2"
             >
-              Travel Support
-            </a>
-            <a
-              href="#architecture"
-              onClick={handleScrollToPlanner}
-              className="hover:text-[#141413] transition-colors py-1 px-2"
-            >
-              Architecture
-            </a>
+              <span>Trip History</span>
+              <span className="transform group-hover:translate-x-1 transition-transform duration-300 ease-out">
+                →
+              </span>
+            </Link>
           </nav>
 
           {/* RIGHT SIDE ACTIONS */}
@@ -124,20 +119,23 @@ export default function Navbar({ onStartPlanning }: NavbarProps) {
             : "opacity-0 -translate-y-3 scale-y-95 max-h-0 overflow-hidden py-0 border-transparent shadow-none"
         }`}
       >
-        <a
-          href="#planner"
-          onClick={handleScrollToPlanner}
+        <Link
+          href="/"
+          onClick={() => setMobileMenuOpen(false)}
           className="block text-base font-medium text-[#141413] hover:text-[#d97757] py-2 border-b border-[#cccbc8]/50 transition-colors"
         >
-          Itinerary Planner
-        </a>
-        <a
-          href="#solutions"
-          onClick={handleScrollToPlanner}
-          className="block text-base font-normal text-[#87867f] hover:text-[#141413] py-2 border-b border-[#cccbc8]/50 transition-colors"
+          Planner
+        </Link>
+        <Link
+          href="/trips"
+          onClick={() => setMobileMenuOpen(false)}
+          className="group flex items-center justify-between text-base font-semibold text-[#141413] hover:text-[#d97757] py-2 border-b border-[#cccbc8]/50 transition-colors duration-300"
         >
-          Travel Support
-        </a>
+          <span>Trip History</span>
+          <span className="transform group-hover:translate-x-1 transition-transform duration-300 ease-out">
+            →
+          </span>
+        </Link>
         <a
           href="#architecture"
           onClick={handleScrollToPlanner}
