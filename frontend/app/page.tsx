@@ -55,7 +55,7 @@ export default function Home() {
               loading={loading}
               error={error}
               trip={trip}
-              days={days}
+              days={Number(days) || 5}
               destination={destination}
               handleSubmit={handleSubmit}
             />

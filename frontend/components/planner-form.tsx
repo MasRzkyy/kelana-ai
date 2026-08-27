@@ -20,10 +20,10 @@ import {
 interface PlannerFormProps {
   destination: string;
   setDestination: (val: string) => void;
-  budget: number;
-  setBudget: (val: number) => void;
-  days: number;
-  setDays: (val: number) => void;
+  budget: number | "";
+  setBudget: (val: number | "") => void;
+  days: number | "";
+  setDays: (val: number | "") => void;
   travelStyle: string;
   setTravelStyle: (val: string) => void;
   travelMonth: string;
@@ -97,7 +97,10 @@ export default function PlannerForm({
                 required
                 min={100}
                 value={budget}
-                onChange={(e) => setBudget(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setBudget(val === "" ? "" : Number(val));
+                }}
                 placeholder="2000"
               />
             </Field>
@@ -111,7 +114,10 @@ export default function PlannerForm({
                 min={1}
                 max={30}
                 value={days}
-                onChange={(e) => setDays(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDays(val === "" ? "" : Number(val));
+                }}
                 placeholder="5"
               />
             </Field>
