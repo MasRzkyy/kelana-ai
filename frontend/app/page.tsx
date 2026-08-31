@@ -5,6 +5,7 @@ import PageRefreshLoader from "@/components/page-refresh-loader";
 import PlannerForm from "@/components/planner-form";
 import ItineraryDisplay from "@/components/itinerary-display";
 import Footer from "@/components/footer";
+import AuthGuard from "@/components/auth-guard";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
 
 export default function Home() {
@@ -28,7 +29,7 @@ export default function Home() {
   } = useTripGenerator();
 
   return (
-    <>
+    <AuthGuard>
       <PageRefreshLoader pageLoading={pageLoading} isFadingOut={isFadingOut} />
 
       <div className="min-h-screen flex flex-col justify-between bg-[#fefefd] text-[#141413]">
@@ -64,6 +65,6 @@ export default function Home() {
 
         <Footer />
       </div>
-    </>
+    </AuthGuard>
   );
 }
