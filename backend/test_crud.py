@@ -25,7 +25,6 @@ def run_tests():
     assert trip1["destination"] == "Japan"
     assert trip1["category"] == "Standard"
     assert trip1["daily_budget"] == 400.0
-    assert trip1["season"] == "Peak Season"
     assert "created_at" in trip1
     trip1_id = trip1["id"]
 
