@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Navbar from "@/components/navbar";
-import Footer from "@/components/footer";
 import AuthGuard from "@/components/auth-guard";
 import TripDashboardClient from "@/components/trip-dashboard-client";
 import { getTrips } from "@/services/trip-service";
@@ -30,9 +28,6 @@ export default function TripsPage() {
   return (
     <AuthGuard>
       <div className="min-h-screen bg-[#f0eee6] text-[#141413] font-[family-name:var(--font-outfit)] flex flex-col justify-between">
-        {/* Floating Navbar */}
-        <Navbar />
-
         {/* Main Content */}
         <main className="pt-28 pb-20 px-6 sm:px-10 max-w-[1240px] mx-auto w-full flex-grow">
           {/* Header Section */}
@@ -97,9 +92,6 @@ export default function TripsPage() {
             <TripDashboardClient initialTrips={trips} />
           )}
         </main>
-
-        {/* Editorial Footer */}
-        <Footer />
       </div>
     </AuthGuard>
   );

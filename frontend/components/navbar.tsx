@@ -81,6 +81,12 @@ export default function Navbar({ onStartPlanning }: NavbarProps) {
                 →
               </span>
             </Link>
+            <Link
+              href="/assistant"
+              className="text-[#141413] hover:text-[#d97757] font-semibold transition-colors duration-300 py-1 px-2 flex items-center gap-1 bg-[#d97757]/10 border border-[#d97757]/30 rounded-full px-3 py-1"
+            >
+              <span>🤖 AI Assistant</span>
+            </Link>
           </nav>
 
           {/* RIGHT SIDE ACTIONS */}
@@ -171,6 +177,14 @@ export default function Navbar({ onStartPlanning }: NavbarProps) {
           <span className="transform group-hover:translate-x-1 transition-transform duration-300 ease-out">
             →
           </span>
+        </Link>
+        <Link
+          href="/assistant"
+          onClick={() => setMobileMenuOpen(false)}
+          className="flex items-center justify-between text-base font-semibold text-[#d97757] py-2 border-b border-[#cccbc8]/50 transition-colors"
+        >
+          <span>🤖 AI Travel Assistant</span>
+          <span>→</span>
         </Link>
 
         <div className="pt-2 flex flex-col gap-2">
