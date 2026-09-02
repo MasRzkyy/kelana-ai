@@ -5,6 +5,7 @@ from models.trip import Trip
 from models.user import User
 from schemas.trip import TripRequest, TripUpdate, TripResponse
 from schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse
+from schemas.kb import QuestionRequest, QuestionResponse
 from services.trip_service import (
     calculate_daily_budget,
     get_trip_category,
@@ -12,6 +13,7 @@ from services.trip_service import (
     get_recommended_places,
 )
 from services.bedrock_service import generate_trip_recommendation
+from services.kb_service import ask_knowledge_base
 from services.auth_service import (
     register_user,
     login_user,
@@ -43,6 +45,28 @@ def home():
 @app.get("/health")
 def health_check():
     return {"status": "OK"}
+
+
+# ── RAG Knowledge Base Endpoints (Session 09 - Part 6) ───────────────────────
+@app.post("/api/v1/ask", response_model=QuestionResponse)
+@app.post("/api/v1/assistant", response_model=QuestionResponse)
+def ask_endpoint(request: QuestionRequest):
+    """
+    Send question to Amazon Bedrock Knowledge Base and return a grounded answer with source citations.
+    """
+    try:
+        res = ask_knowledge_base(request.question)
+        return QuestionResponse(
+            question=request.question,
+            answer=res["answer"],
+            source=res.get("source"),
+            citations=res.get("citations"),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to query Knowledge Base: {str(e)}"
+        )
 
 
 # ── Auth Endpoints ────────────────────────────────────────────────────────────

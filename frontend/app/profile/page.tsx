@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/navbar";
-import Footer from "@/components/footer";
 import { getMe, logoutUser, User } from "@/services/auth-service";
 import { getTrips } from "@/services/trip-service";
 import { TripRecommendation } from "@/types/trip";
@@ -46,7 +44,6 @@ export default function ProfilePage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#f0eee6] text-[#141413] font-[family-name:var(--font-outfit)] flex flex-col justify-between">
-        <Navbar />
         <main className="pt-32 pb-20 px-6 max-w-xl mx-auto w-full flex-grow flex items-center justify-center">
           <div className="flex items-center gap-3 bg-[#faf9f5] border border-[#cccbc8] px-6 py-4 rounded-2xl shadow-xs">
             <svg className="animate-spin h-5 w-5 text-[#d97757]" fill="none" viewBox="0 0 24 24">
@@ -56,16 +53,12 @@ export default function ProfilePage() {
             <span className="text-sm font-medium text-[#141413]">Loading profile data from GET /api/v1/auth/me...</span>
           </div>
         </main>
-        <Footer />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#f0eee6] text-[#141413] font-[family-name:var(--font-outfit)] flex flex-col justify-between">
-      {/* Floating Navbar */}
-      <Navbar />
-
       {/* Main Profile Container */}
       <main className="pt-32 pb-20 px-6 sm:px-10 max-w-2xl mx-auto w-full flex-grow">
         <div className="space-y-6">
@@ -149,9 +142,6 @@ export default function ProfilePage() {
           </div>
         </div>
       </main>
-
-      {/* Footer */}
-      <Footer />
     </div>
   );
 }

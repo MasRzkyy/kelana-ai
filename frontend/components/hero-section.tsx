@@ -1,12 +1,10 @@
 "use client";
 
-import Navbar from "@/components/navbar";
 import WorldMapAnimation from "@/components/world-map-animation";
 
 export default function HeroSection() {
   return (
     <section className="relative pb-12 sm:pb-16 bg-[#fefefd]">
-      <Navbar />
       <div className="max-w-[1200px] mx-auto px-6 sm:px-10 pt-24 sm:pt-28">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           <div className="lg:col-span-6 max-w-2xl">
