@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from "@/lib/config";
+
 export interface User {
   id: number;
   name: string;
@@ -11,7 +13,7 @@ export interface AuthResponse {
   user?: User;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const API_URL = getApiBaseUrl();
 
 export async function registerUser(name: string, email: string, password: string): Promise<User> {
   const res = await fetch(`${API_URL}/auth/register`, {
