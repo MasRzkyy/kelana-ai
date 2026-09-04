@@ -32,5 +32,6 @@ def init_db() -> None:
     """Create all SQLAlchemy tables for the configured database."""
     import models.user
     import models.trip
+    import models.conversation
     Base.metadata.create_all(bind=engine)
 

@@ -47,6 +47,9 @@ export async function loginUser(email: string, password: string): Promise<AuthRe
   const data: AuthResponse = await res.json();
   if (data.access_token) {
     saveAuthData(data.access_token, data.user);
+    if (!data.user) {
+      await getMe();
+    }
   }
   return data;
 }
@@ -58,6 +61,7 @@ export function saveAuthData(token: string, user?: User): void {
     if (user) {
       localStorage.setItem("user", JSON.stringify(user));
     }
+    window.dispatchEvent(new Event("auth-change"));
   }
 }
 
@@ -98,6 +102,7 @@ export async function getMe(): Promise<User | null> {
     const user: User = await res.json();
     if (typeof window !== "undefined") {
       localStorage.setItem("user", JSON.stringify(user));
+      window.dispatchEvent(new Event("auth-change"));
     }
     return user;
   } catch (error) {
@@ -111,5 +116,6 @@ export function logoutUser(): void {
     localStorage.removeItem("token");
     localStorage.removeItem("access_token");
     localStorage.removeItem("user");
+    window.dispatchEvent(new Event("auth-change"));
   }
 }
