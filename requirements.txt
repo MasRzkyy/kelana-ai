@@ -1,0 +1,10 @@
+fastapi[standard]
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+python-dotenv
+boto3==1.43.56
+passlib[bcrypt]
+bcrypt
+python-jose[cryptography]
+python-multipart
