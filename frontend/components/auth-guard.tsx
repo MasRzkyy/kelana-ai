@@ -2,19 +2,31 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getAuthToken } from "@/services/auth-service";
+import { getAuthToken, getMe, logoutUser } from "@/services/auth-service";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
-    const token = getAuthToken();
-    if (!token) {
-      router.push("/login");
-    } else {
+    async function checkAuth() {
+      const token = getAuthToken();
+      if (!token) {
+        router.push("/login");
+        return;
+      }
+
+      const user = await getMe();
+      if (!user) {
+        logoutUser();
+        router.push("/login");
+        return;
+      }
+
       setIsAuthorized(true);
     }
+
+    checkAuth();
   }, [router]);
 
   if (!isAuthorized) {

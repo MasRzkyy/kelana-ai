@@ -3,9 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import SessionLocal, init_db
 from models.trip import Trip
 from models.user import User
+from models.conversation import Conversation, Message
 from schemas.trip import TripRequest, TripUpdate, TripResponse
 from schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse
 from schemas.kb import QuestionRequest, QuestionResponse
+from schemas.conversation import (
+    CreateConversationResponse,
+    ConversationResponse,
+    ConversationUpdate,
+    SendMessageRequest,
+    MessageResponse,
+)
+from typing import List
 from services.trip_service import (
     calculate_daily_budget,
     get_trip_category,
@@ -221,6 +230,182 @@ def generate_ai_recommendation(trip_id: int, user: User = Depends(get_current_us
         db.refresh(trip)
 
         return trip
+    finally:
+        db.close()
+
+
+# ── Conversation Endpoints (Session 10 - Part 3) ──────────────────────────────
+@app.post("/api/v1/conversations", response_model=CreateConversationResponse, status_code=201)
+def create_conversation(user: User = Depends(get_current_user)):
+    """Create a new conversation row for the authenticated user."""
+    db = SessionLocal()
+    try:
+        conv = Conversation(user_id=user.id, title="New Conversation")
+        db.add(conv)
+        db.commit()
+        db.refresh(conv)
+        return CreateConversationResponse(conversation_id=conv.id)
+    finally:
+        db.close()
+
+
+@app.get("/api/v1/conversations", response_model=List[ConversationResponse])
+def list_conversations(user: User = Depends(get_current_user)):
+    """List previous conversations for the authenticated user."""
+    db = SessionLocal()
+    try:
+        convs = db.query(Conversation).filter(Conversation.user_id == user.id).order_by(Conversation.created_at.desc()).all()
+        result = []
+        for c in convs:
+            title = c.title or "New Conversation"
+            result.append(ConversationResponse(id=c.id, title=title, created_at=c.created_at))
+        return result
+    finally:
+        db.close()
+
+
+@app.patch("/api/v1/conversations/{id}", response_model=ConversationResponse)
+def update_conversation(
+    id: int,
+    request: ConversationUpdate,
+    user: User = Depends(get_current_user)
+):
+    """Bonus Challenge: Rename conversation title."""
+    db = SessionLocal()
+    try:
+        conv = db.query(Conversation).filter(Conversation.id == id).first()
+        if not conv:
+            raise HTTPException(status_code=404, detail=f"Conversation with id {id} not found")
+        if conv.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Forbidden: You do not own this conversation")
+
+        conv.title = request.title.strip()
+        db.commit()
+        db.refresh(conv)
+        return ConversationResponse(id=conv.id, title=conv.title, created_at=conv.created_at)
+    finally:
+        db.close()
+
+
+# ── Part 4: Send Message API (Orchestration) ──────────────────────────────────
+@app.post("/api/v1/conversations/{id}/messages", response_model=MessageResponse, status_code=201)
+def send_message(
+    id: int,
+    request: SendMessageRequest,
+    user: User = Depends(get_current_user)
+):
+    """
+    Session 10 - Part 4: Send Message API
+    Orchestration steps:
+      01: Receive User Message
+      02: Save Message (role='user')
+      03: Load Previous Messages
+      04: Build Prompt
+      05: Amazon Bedrock (ask_knowledge_base)
+      06: Save AI Response (role='assistant')
+      07: Return Response
+    """
+    db = SessionLocal()
+    try:
+        conv = db.query(Conversation).filter(Conversation.id == id).first()
+        if not conv:
+            raise HTTPException(status_code=404, detail=f"Conversation with id {id} not found")
+        if conv.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Forbidden: You do not own this conversation")
+
+        # 01 & 02: Save User Message
+        user_msg = Message(
+            conversation_id=conv.id,
+            role="user",
+            content=request.content
+        )
+        db.add(user_msg)
+        db.commit()
+
+        # Update conversation title if default
+        if not conv.title or conv.title == "New Conversation":
+            conv.title = request.content[:50]
+            db.commit()
+
+        # 03: Load Previous Messages (prior to current message)
+        previous_messages = (
+            db.query(Message)
+            .filter(Message.conversation_id == conv.id, Message.id != user_msg.id)
+            .order_by(Message.created_at.asc())
+            .all()
+        )
+
+        chat_history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in previous_messages
+        ]
+
+        # 04 & 05: Build Prompt & Call Amazon Bedrock (Context-Aware Multi-turn)
+        try:
+            res = ask_knowledge_base(request.content, chat_history=chat_history)
+            ai_content = res.get("answer", "Maaf, terjadi kesalahan saat menghubungi Knowledge Base.")
+        except Exception as e:
+            ai_content = f"Maaf, tidak dapat memproses permintaan: {str(e)}"
+
+        # 06: Save AI Response
+        ai_msg = Message(
+            conversation_id=conv.id,
+            role="assistant",
+            content=ai_content,
+            source=res.get("source") if isinstance(res, dict) else None
+        )
+        db.add(ai_msg)
+        db.commit()
+        db.refresh(ai_msg)
+
+        # 07: Return Response
+        return ai_msg
+    finally:
+        db.close()
+
+
+@app.get("/api/v1/conversations/{id}/messages", response_model=List[MessageResponse])
+def get_conversation_messages(
+    id: int,
+    user: User = Depends(get_current_user)
+):
+    """Retrieve all messages for a specific conversation."""
+    db = SessionLocal()
+    try:
+        conv = db.query(Conversation).filter(Conversation.id == id).first()
+        if not conv:
+            raise HTTPException(status_code=404, detail=f"Conversation with id {id} not found")
+        if conv.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Forbidden: You do not own this conversation")
+
+        messages = (
+            db.query(Message)
+            .filter(Message.conversation_id == conv.id)
+            .order_by(Message.created_at.asc())
+            .all()
+        )
+        return messages
+    finally:
+        db.close()
+
+
+@app.delete("/api/v1/conversations/{id}")
+def delete_conversation(
+    id: int,
+    user: User = Depends(get_current_user)
+):
+    """Delete a specific conversation and all its messages from database."""
+    db = SessionLocal()
+    try:
+        conv = db.query(Conversation).filter(Conversation.id == id).first()
+        if not conv:
+            raise HTTPException(status_code=404, detail=f"Conversation with id {id} not found")
+        if conv.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Forbidden: You do not own this conversation")
+
+        db.delete(conv)
+        db.commit()
+        return {"message": "Conversation deleted successfully", "id": id}
     finally:
         db.close()
 

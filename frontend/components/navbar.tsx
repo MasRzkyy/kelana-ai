@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getCurrentUser, logoutUser, User } from "@/services/auth-service";
+import { getCurrentUser, getMe, logoutUser, User } from "@/services/auth-service";
 
 interface NavbarProps {
   onStartPlanning?: () => void;
@@ -15,8 +15,27 @@ export default function Navbar({ onStartPlanning }: NavbarProps) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   useEffect(() => {
-    const user = getCurrentUser();
-    setCurrentUser(user);
+    async function syncUser() {
+      let user = getCurrentUser();
+      if (!user) {
+        user = await getMe();
+      }
+      setCurrentUser(user);
+    }
+
+    syncUser();
+
+    const handleAuthChange = () => {
+      syncUser();
+    };
+
+    window.addEventListener("auth-change", handleAuthChange);
+    window.addEventListener("storage", handleAuthChange);
+
+    return () => {
+      window.removeEventListener("auth-change", handleAuthChange);
+      window.removeEventListener("storage", handleAuthChange);
+    };
   }, []);
 
   const handleLogout = () => {
