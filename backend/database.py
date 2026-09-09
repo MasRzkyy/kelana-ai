@@ -34,4 +34,3 @@ def init_db() -> None:
     import models.trip
     import models.conversation
     Base.metadata.create_all(bind=engine)
-
