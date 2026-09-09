@@ -142,15 +142,26 @@ def ask_knowledge_base(question: str, chat_history: List[Dict[str, str]] = None)
 
     # Smart destination extractor with negation filter (e.g. "tidak ingin ke kyoto" ignores kyoto)
     destination_terms = {
+        "malang": ["malang", "batu", "kota batu", "coban rondo", "jatim park", "museum angkut", "sampoerna"],
+        "bali": ["bali", "denpasar", "kuta", "ubud", "seminyak", "canggu", "sanur", "nusa penida", "jimbaran"],
+        "yogyakarta": ["yogyakarta", "jogja", "yogya", "malioboro", "prambanan", "borobudur", "sleman"],
+        "komodo": ["komodo", "labuan bajo", "flores", "manta point", "padar"],
+        "lombok": ["lombok", "gili", "gili trawangan", "mandalika", "senggigi"],
+        "bandung": ["bandung", "lembang", "ciwidey", "dago"],
+        "bromo": ["bromo", "tengger", "probolinggo", "pasuruan", "tnbts"],
+        "rinjani": ["rinjani", "gunung rinjani", "sembalun", "senaru", "tngr"],
+        "ijen": ["ijen", "kawah ijen", "banyuwangi"],
+        "bogor": ["bogor", "kebun raya bogor", "puncak"],
+        "dieng": ["dieng", "sikunir", "telaga warna", "banjarnegara", "wonosobo"],
+        "toba": ["toba", "danau toba", "samosir", "medan"],
+        "belitung": ["belitung", "tanjung tinggi"],
+        "toraja": ["toraja", "tana toraja", "makassar"],
+        "surabaya": ["surabaya"],
+        "jakarta": ["jakarta"],
         "jepang": ["jepang", "japan", "tokyo", "kyoto", "osaka", "hokkaido"],
-        "bali": ["bali", "denpasar", "kuta", "ubud", "seminyak", "canggu", "sanur"],
-        "komodo": ["komodo", "labuan bajo", "flores"],
         "singapore": ["singapore", "singapura"],
         "hongkong": ["hongkong", "hong kong"],
         "korea": ["korea", "seoul", "busan"],
-        "yogyakarta": ["yogyakarta", "jogja", "yogya"],
-        "lombok": ["lombok", "gili"],
-        "bandung": ["bandung"],
         "raja ampat": ["raja ampat"]
     }
 
@@ -201,43 +212,153 @@ def ask_knowledge_base(question: str, chat_history: List[Dict[str, str]] = None)
         ]
         history_str = "PREVIOUS CONVERSATION HISTORY:\n" + "\n".join(history_lines) + "\n\n"
 
-    # Strategy 1: Attempt standard retrieve_and_generate API
-    try:
-        lang_prompt = (
-            f"CRITICAL MANDATES:\n"
-            f"1. Respond strictly in {target_lang} (Indonesian question -> Indonesian response, English question -> English response).\n"
-            f"2. CONSULTATIVE BEHAVIOR RULE: If the user asks for travel recommendations without specifying the number of days, DO NOT force a day-by-day itinerary ('Hari 1', 'Hari 2'). Instead, present top recommended destinations/activities with estimated prices in Rupiah (Rp), then ask the user politely how many days they plan to stay so you can create a customized itinerary.\n"
-            f"3. ABSOLUTE CURRENCY RULE: If responding in Indonesian or if user input mentions Rupiah (Rp / IDR), EVERY SINGLE price, flight ticket (e.g., 'Pesawat: Rp 1.500.000 - Rp 3.000.000 per orang'), hotel, food, transport, activity, and total budget summary MUST be displayed strictly in Rupiah (Rp). Absolutely no USD ($) symbols.\n"
-            f"4. Stay 100% focused ONLY on the destination requested in the user prompt/conversation history ({', '.join(set(detected_destinations)) if detected_destinations else 'the requested trip'}). DO NOT include unrelated countries or places.\n\n"
-            f"{history_str}"
-            f"Question: {question}"
-        )
+    dest_name = ", ".join(set(detected_destinations)).title() if detected_destinations else "the user's requested destination"
 
-        response = kb_client.retrieve_and_generate(
-            input={"text": lang_prompt},
-            retrieveAndGenerateConfiguration={
-                "type": "KNOWLEDGE_BASE",
-                "knowledgeBaseConfiguration": {
-                    "knowledgeBaseId": KNOWLEDGE_BASE_ID,
-                    "modelArn": KNOWLEDGE_BASE_MODEL_ARN,
+    # Determine if user is asking about an Indonesian destination
+    foreign_keys = ["jepang", "singapore", "hongkong", "korea"]
+    is_indo_destination = True
+    if detected_destinations and any(d in foreign_keys for d in detected_destinations):
+        is_indo_destination = False
+
+    # RAG Pipeline: Retrieve from Knowledge Base with clean query + Bedrock Converse
+    try:
+        print(f"[RAG Pipeline] Searching Knowledge Base for query: '{retrieval_query_text}'...")
+        ret_res = kb_client.retrieve(
+            knowledgeBaseId=KNOWLEDGE_BASE_ID,
+            retrievalQuery={"text": retrieval_query_text},
+            retrievalConfiguration={
+                "managedSearchConfiguration": {
+                    "numberOfResults": 5,
                 },
             },
         )
 
-        answer_text = response.get("output", {}).get("text", "")
-        citations = response.get("citations", [])
+        results = ret_res.get("retrievalResults", [])
+        contexts = []
         source_files = []
 
-        for citation in citations:
-            for ref in citation.get("retrievedReferences", []):
-                location = ref.get("location", {})
-                if location.get("type") == "S3":
-                    s3_uri = location.get("s3Location", {}).get("uri", "")
-                    if s3_uri:
-                        filename = s3_uri.split("/")[-1]
-                        if filename and filename not in source_files:
-                            source_files.append(filename)
+        for r in results:
+            content_text = r.get("content", {}).get("text", "").strip()
+            if not content_text:
+                continue
 
+            uri = r.get("location", {}).get("s3Location", {}).get("uri", "")
+            filename = uri.split("/")[-1] if uri else ""
+            filename_lower = filename.lower()
+            text_lower = content_text.lower()
+
+            # Filter out snippets from completely unrelated non-tourist countries
+            unrelated_terms = ["north korea", "korea utara", "pyongyang", "rason", "hungnam", "kazakhstan", "kyrgyzstan", "turkmenistan"]
+            if any(u in text_lower for u in unrelated_terms):
+                continue
+
+            # Strict RAG Filter: If user query is for an Indonesian destination, discard Tokyo/Japan guidebooks and Yen prices!
+            if is_indo_destination:
+                if any(k in filename_lower for k in ["tokyo", "japan", "kyoto", "osaka"]):
+                    print(f"[RAG Filter] Discarded Tokyo/Japan file snippet '{filename}' for Indonesian query '{question}'")
+                    continue
+                if any(y in text_lower for y in ["yen", "¥", "observatorium", "shinjuku", "tokyo"]):
+                    print(f"[RAG Filter] Discarded Tokyo/Yen content snippet for Indonesian query '{question}'")
+                    continue
+
+            contexts.append(content_text)
+
+            if filename and filename not in source_files:
+                source_files.append(filename)
+
+        # Only return fallback message if there is NO context AND NO chat history to rely on
+        if not contexts and not chat_history:
+            fallback_msg = (
+                "Maaf, tidak ditemukan informasi yang relevan di dalam dokumen Knowledge Base."
+                if user_is_indo
+                else "No relevant information found in the Knowledge Base documents."
+            )
+            return {
+                "answer": fallback_msg,
+                "source": None,
+                "citations": [],
+            }
+
+        context_str = "\n\n".join(contexts) if contexts else "Gunakan pengetahuan aktual pariwisata Indonesia dan memori percakapan sebelumnya."
+
+        system_instruction = (
+            f"You are KelanaAI, an expert travel assistant.\n\n"
+            f"DESTINATION SWITCHING & FOCUS MANDATE:\n"
+            f"1. Current Target Destination: {dest_name}.\n"
+            f"2. DYNAMIC DESTINATION SWITCHING: If the user previously discussed another city (e.g. Malang or Bali) but their current question asks about a NEW place (e.g. Gunung Rinjani, Gunung Bromo, Kebun Raya Bogor, Borobudur), IMMEDIATELY SWITCH 100% to the new place ({dest_name})!\n"
+            f"3. DO NOT complain or refuse destination switches. DO NOT mix recommendations between the old city and the new city.\n\n"
+            f"ACCURACY & AUTHENTIC INDONESIAN TOURISM DATA MANDATE:\n"
+            f"1. Provide authentic, real-world ticket prices, operating hours, and entry fees in Indonesian Rupiah (Rp).\n"
+            f"2. DO NOT invent fake places (like 'Observatorium Bromo') or convert Japanese Yen into Rp 300!\n"
+            f"3. Real-world entry ticket price reference for Indonesian destinations:\n"
+            f"   - Gunung Bromo (TNBTS): Tiket masuks wisnus Rp 29.000 - Rp 34.000 (hari kerja), Rp 34.000 - Rp 54.000 (weekend/libur).\n"
+            f"   - Gunung Rinjani (TNGR): Tiket masuk wisnus Rp 5.000 - Rp 15.000 per hari.\n"
+            f"   - Kawah Ijen: Tiket masuk wisnus Rp 5.000 - Rp 7.500.\n"
+            f"   - Candi Borobudur: Tiket kawasan Rp 50.000 (dewasa wisnus), Rp 25.000 (anak/pelajar).\n"
+            f"   - Kebun Raya Bogor: Tiket masuk Rp 15.000 - Rp 25.000 per orang.\n\n"
+            f"CRITICAL MEMORY & TOTAL COST SUMMATION MANDATE:\n"
+            f"1. MEMORY INTEGRITY: Carefully read PREVIOUS CONVERSATION HISTORY. If trip duration (e.g. '3 hari', '4 hari') was specified in history or in current prompt, DO NOT ask the user for duration again!\n"
+            f"2. EXPLICIT TOTAL SUMMATION: When user asks for total cost or budget (e.g. 'Berapa total biayanya?'), ALWAYS calculate and output explicit TOTAL SUM ranges in Rupiah (Rp) for the total trip duration (e.g. 'Total Estimasi 3 Hari (2 Malam): Rp 1.350.000 - Rp 2.500.000'). Sum up accommodation + food + transport + attractions.\n\n"
+            f"CRITICAL CONSULTATIVE RESPONSE MANDATE:\n"
+            f"1. DO NOT force a day-by-day itinerary (e.g. 'Hari 1:', 'Hari 2:') UNLESS the user explicitly asks for an itinerary/rute or explicitly specifies the duration (e.g., 'selama 3 hari', 'itinerary 4 hari', 'rute 2 hari').\n"
+            f"2. DO NOT ask the user how many days they plan to stay/sleep inside single-day attractions, parks, or mountains unless planning a multi-day trek.\n\n"
+            f"CRITICAL LANGUAGE MANDATE:\n"
+            f"1. Respond strictly in {target_lang}.\n"
+            f"2. If the user question is in Indonesian, write your ENTIRE answer in natural, professional Indonesian (Bahasa Indonesia).\n\n"
+            f"ESTIMATED COST & HARD-BUDGET MANDATE:\n"
+            f"1. STRICT HARD-BUDGET CONSTRAINT: If the user specifies ANY budget limit (e.g. Rp 1.000.000, Rp 2.500.000, or Rp 5.000.000), EVERY SINGLE price recommendation and the MAXIMUM TOTAL ESTIMATED COST MUST NEVER EXCEED that specific user budget limit! The maximum of your estimated total cost range MUST be <= the user's stated budget limit. Adjust accommodation, food, transport, and attraction choices so that even the upper bound of the total estimate strictly fits within the user's specified budget.\n"
+            f"2. STRICT CURRENCY CONVERSION: Display ALL price estimates, flight tickets, transport, accommodation, food, and activities strictly in Rupiah (Rp) (e.g., 'Pesawat: Rp 1.500.000 - Rp 3.000.000 per orang', 'Hostel: Rp 150.000 - Rp 300.000/malam', 'Rp 0 (Gratis)').\n"
+            f"3. NO USD ALLOWED: NEVER output '$100 - $200' or any USD ($) figures for flight tickets or hotels when responding in Rupiah. Convert all USD values to Rupiah.\n"
+            f"4. ALWAYS provide a clear EXPLICIT TOTAL BUDGET SUMMARY calculation at the end."
+        )
+
+        current_prompt = (
+            f"User Question: {question}\n\n"
+            f"Context from trusted travel documents:\n{context_str}\n\n"
+            f"Based on the provided context above and previous conversation history, answer the user's question in {target_lang}.\n"
+            f"IMPORTANT: Answer the question for {dest_name} accurately based on real-world Indonesian travel data in Rupiah (Rp). DO NOT use Japanese Yen figures or Tokyo guide data."
+        )
+
+        # Reconstruct converse API messages with chat_history (Part 8: Context Trimming to last 10 turns)
+        MAX_WINDOW_TURNS = 10
+        trimmed_history = chat_history[-MAX_WINDOW_TURNS:] if chat_history else []
+        if chat_history and len(chat_history) > MAX_WINDOW_TURNS:
+            logger.info(f"[Part 8 Context Trimming] Trimmed conversation history from {len(chat_history)} to last {MAX_WINDOW_TURNS} turns for token optimization.")
+
+        converse_messages = []
+        if trimmed_history:
+            for msg in trimmed_history:
+                role = "user" if msg.get("role") == "user" else "assistant"
+                converse_messages.append({
+                    "role": role,
+                    "content": [{"text": msg.get("content", "")}]
+                })
+
+        # Ensure strictly alternating roles for Bedrock Converse API
+        sanitized_messages = []
+        for m in converse_messages:
+            if sanitized_messages and sanitized_messages[-1]["role"] == m["role"]:
+                sanitized_messages[-1]["content"][0]["text"] += f"\n\n{m['content'][0]['text']}"
+            else:
+                sanitized_messages.append(m)
+
+        if sanitized_messages and sanitized_messages[-1]["role"] == "user":
+            sanitized_messages[-1]["content"][0]["text"] += f"\n\n[Follow-up question]: {current_prompt}"
+        else:
+            sanitized_messages.append({"role": "user", "content": [{"text": current_prompt}]})
+
+        converse_res = bedrock_runtime_client.converse(
+            modelId=MODEL_ID,
+            system=[{"text": system_instruction}],
+            messages=sanitized_messages,
+            inferenceConfig={
+                "maxTokens": 2048,
+                "temperature": 0.7,
+                "topP": 0.9
+            }
+        )
+
+        answer_text = converse_res["output"]["message"]["content"][0]["text"]
         source_str = ", ".join(source_files) if source_files else None
 
         return {
@@ -245,147 +366,6 @@ def ask_knowledge_base(question: str, chat_history: List[Dict[str, str]] = None)
             "source": source_str,
             "citations": source_files,
         }
-
-    except Exception as primary_err:
-        print(f"[Knowledge Base Notice] retrieve_and_generate notice: {primary_err}. Executing Retrieve (numberOfResults=5) + Converse RAG pipeline...")
-
-        # Strategy 2: Managed Knowledge Base Retrieve (numberOfResults=5) + Bedrock Converse
-        try:
-            ret_res = kb_client.retrieve(
-                knowledgeBaseId=KNOWLEDGE_BASE_ID,
-                retrievalQuery={"text": retrieval_query_text},
-                retrievalConfiguration={
-                    "managedSearchConfiguration": {
-                        "numberOfResults": 5,
-                    },
-                },
-            )
-
-            results = ret_res.get("retrievalResults", [])
-            contexts = []
-            source_files = []
-
-            for r in results:
-                content_text = r.get("content", {}).get("text", "").strip()
-                if not content_text:
-                    continue
-
-                # Filter out snippets from completely unrelated destinations if detected_destinations exists
-                if detected_destinations:
-                    text_lower = content_text.lower()
-                    other_dest_terms = ["north korea", "korea utara", "pyongyang", "rason", "hungnam", "kazakhstan", "kyrgyzstan", "turkmenistan"]
-                    for dk, aliases in destination_terms.items():
-                        if dk not in detected_destinations:
-                            other_dest_terms.extend(aliases)
-                    
-                    if any(u in text_lower for u in other_dest_terms) and not any(d in text_lower for d in detected_destinations):
-                        continue
-
-                contexts.append(content_text)
-
-                uri = r.get("location", {}).get("s3Location", {}).get("uri", "")
-                if uri:
-                    filename = uri.split("/")[-1]
-                    if filename and filename not in source_files:
-                        source_files.append(filename)
-
-            # If filtering removed all contexts, fallback to raw results
-            if not contexts and results:
-                for r in results:
-                    ct = r.get("content", {}).get("text", "").strip()
-                    if ct:
-                        contexts.append(ct)
-
-            if not contexts:
-                fallback_msg = (
-                    "Maaf, tidak ditemukan informasi yang relevan di dalam dokumen Knowledge Base."
-                    if user_is_indo
-                    else "No relevant information found in the Knowledge Base documents."
-                )
-                return {
-                    "answer": fallback_msg,
-                    "source": None,
-                    "citations": [],
-                }
-
-            context_str = "\n\n".join(contexts)
-            dest_focus_str = f" TARGET DESTINATION: {', '.join(set(detected_destinations)).upper()}." if detected_destinations else ""
-
-            system_instruction = (
-                f"You are KelanaAI, an expert travel assistant.\n\n"
-                f"CRITICAL DESTINATION FOCUS MANDATE:\n"
-                f"1. You MUST stay 100% focused strictly on the user's requested destination ({dest_focus_str}).\n"
-                f"2. You MUST ONLY recommend hotels, places, transportation, and activities that strictly belong to {dest_focus_str if dest_focus_str else 'the user requested trip'}.\n"
-                f"3. ABSOLUTELY DO NOT introduce or list hotels/attractions from Pyongyang, North Korea, Tokyo, Kyoto, Kazakhstan, or any other unrelated city/country.\n\n"
-                f"CRITICAL CONSULTATIVE RESPONSE MANDATE:\n"
-                f"1. DO NOT force a day-by-day itinerary (e.g. 'Hari 1:', 'Hari 2:') UNLESS the user explicitly asks for an itinerary/rute or explicitly specifies the duration (e.g., 'selama 3 hari', 'itinerary 4 hari', 'rute 2 hari').\n"
-                f"2. IF THE USER ASKS FOR RECOMMENDATIONS WITHOUT DURATION (e.g., 'rekomendasi tempat wisata di Bali', 'saya ingin ke Bali dengan budget 5 juta bersama pasangan'):\n"
-                f"   - Present a curated list of top recommended attractions, romantic spots, accommodation, and transport/food options with clear price estimates in Rupiah (Rp).\n"
-                f"   - ALWAYS end your response by asking the user a polite consultative question: 'Berapa hari Anda dan pasangan berencana berlibur di [Destinasi]? Beri tahu saya durasinya agar saya bisa buatkan rute itinerary hari demi hari yang paling pas dengan budget Anda!'\n"
-                f"3. ONLY structure output as 'Hari 1', 'Hari 2', etc. when the user explicitly requests a multi-day itinerary or specifies the trip duration.\n\n"
-                f"CRITICAL LANGUAGE MANDATE:\n"
-                f"1. Respond strictly in {target_lang}.\n"
-                f"2. If the user question is in Indonesian, write your ENTIRE answer in natural, professional Indonesian (Bahasa Indonesia).\n\n"
-                f"ESTIMATED COST & BUDGET MANDATE:\n"
-                f"1. STRICT CURRENCY CONVERSION: Display ALL price estimates, flight tickets, transport, accommodation, food, and activities strictly in Rupiah (Rp) (e.g., 'Pesawat: Rp 1.500.000 - Rp 3.000.000 per orang', 'Hostel: Rp 150.000 - Rp 300.000/malam', 'Rp 0 (Gratis)').\n"
-                f"2. NO USD ALLOWED: NEVER output '$100 - $200' or any USD ($) figures for flight tickets or hotels when responding in Rupiah. Convert all USD values to Rupiah.\n"
-                f"3. Provide a clear total budget summary breakdown at the end."
-            )
-
-            current_prompt = (
-                f"User Question: {question}\n\n"
-                f"Context from trusted travel documents:\n{context_str}\n\n"
-                f"Based on the provided context above and previous conversation history, answer the user's question in {target_lang}.\n"
-                f"IMPORTANT: If the user did NOT specify duration/number of days, list recommended places with prices in Rupiah (Rp) and ask how many days they plan to stay. DO NOT create 'Hari 1, Hari 2' unless requested. Absolutely no USD ($) symbols."
-            )
-
-            # Reconstruct converse API messages with chat_history (Part 8: Context Trimming to last 10 turns)
-            MAX_WINDOW_TURNS = 10
-            trimmed_history = chat_history[-MAX_WINDOW_TURNS:] if chat_history else []
-            if chat_history and len(chat_history) > MAX_WINDOW_TURNS:
-                logger.info(f"[Part 8 Context Trimming] Trimmed conversation history from {len(chat_history)} to last {MAX_WINDOW_TURNS} turns for token optimization.")
-
-            converse_messages = []
-            if trimmed_history:
-                for msg in trimmed_history:
-                    role = "user" if msg.get("role") == "user" else "assistant"
-                    converse_messages.append({
-                        "role": role,
-                        "content": [{"text": msg.get("content", "")}]
-                    })
-
-            # Ensure strictly alternating roles for Bedrock Converse API
-            sanitized_messages = []
-            for m in converse_messages:
-                if sanitized_messages and sanitized_messages[-1]["role"] == m["role"]:
-                    sanitized_messages[-1]["content"][0]["text"] += f"\n\n{m['content'][0]['text']}"
-                else:
-                    sanitized_messages.append(m)
-
-            if sanitized_messages and sanitized_messages[-1]["role"] == "user":
-                sanitized_messages[-1]["content"][0]["text"] += f"\n\n[Follow-up question]: {current_prompt}"
-            else:
-                sanitized_messages.append({"role": "user", "content": [{"text": current_prompt}]})
-
-            converse_res = bedrock_runtime_client.converse(
-                modelId=MODEL_ID,
-                system=[{"text": system_instruction}],
-                messages=sanitized_messages,
-                inferenceConfig={
-                    "maxTokens": 2048,
-                    "temperature": 0.7,
-                    "topP": 0.9
-                }
-            )
-
-            answer_text = converse_res["output"]["message"]["content"][0]["text"]
-            source_str = ", ".join(source_files) if source_files else None
-
-            return {
-                "answer": answer_text,
-                "source": source_str,
-                "citations": source_files,
-            }
-        except Exception as fallback_err:
-            print(f"[Knowledge Base Error] Managed retrieval failed: {fallback_err}")
-            raise fallback_err
+    except Exception as fallback_err:
+        print(f"[Knowledge Base Error] Managed retrieval failed: {fallback_err}")
+        raise fallback_err
